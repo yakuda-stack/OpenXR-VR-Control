@@ -45,6 +45,13 @@ For everyone playing VR on Linux **without** a Pico or Quest — Valve Index, HT
 | 🤝 **Works alongside Yakuda Connect** | If Yakuda Connect already built xrBinder or obah, that installation is reused. |
 | 🌍 **English / Deutsch** | Follows your system language and can be switched at the top right. |
 
+<table>
+  <tr>
+    <td align="center"><b>OpenVR game (obah)</b><br><img src="assets/openvrcontrol.png" alt="OpenVR" width="420"/></td>
+    <td align="center"><b>OpenXR game (xrBinder)</b><br><img src="assets/openxrcontrol.png" alt="OpenXR" width="420"/></td>
+  </tr>
+</table>
+
 <p align="center">
   <img src="assets/screenshot_deadzone.png" alt="Deadzone" width="560"/>
 </p>
@@ -53,14 +60,12 @@ For everyone playing VR on Linux **without** a Pico or Quest — Valve Index, HT
 
 ### 🚀 Getting started
 
-```bash
-# Arch / CachyOS
-sudo pacman -S pyside6
-# other distros
-pip install -r requirements.txt
-
-python3 starter.py
-```
+| | |
+|---|---|
+| **AUR** (Arch / CachyOS) | `yay -S openxr-vr-control` |
+| **AppImage** (any distro) | Download from [Releases](https://github.com/yakuda-stack/OpenXR-VR-Control/releases), `chmod +x`, start |
+| **Installer** (Arch, Fedora, Debian/Ubuntu, openSUSE) | `bash <(curl -s https://raw.githubusercontent.com/yakuda-stack/OpenXR-VR-Control/main/install.sh)` |
+| **From source** | `sudo pacman -S pyside6` (or `pip install -r requirements.txt`), then `python3 starter.py` |
 
 1. Switch on **obah** (for OpenVR games) and/or **xrBinder** (for OpenXR games). If a tool is missing, the app asks how to install it.
 2. Under **① Game**, pick your game. Missing? Use **+ Add Steam game** / **+ Add local game**.
@@ -104,10 +109,10 @@ Für alle, die unter Linux VR spielen, aber **keine** Pico oder Quest haben: Val
 
 ### 🚀 Start
 
-```bash
-sudo pacman -S pyside6     # oder: pip install -r requirements.txt
-python3 starter.py
-```
+- **AUR:** `yay -S openxr-vr-control`
+- **AppImage:** aus den [Releases](https://github.com/yakuda-stack/OpenXR-VR-Control/releases) laden, ausführbar machen, starten
+- **Installer:** `bash <(curl -s https://raw.githubusercontent.com/yakuda-stack/OpenXR-VR-Control/main/install.sh)`
+- **Aus dem Quellcode:** `sudo pacman -S pyside6`, dann `python3 starter.py`
 
 1. **obah** und/oder **xrBinder** einschalten. Fehlt ein Werkzeug, fragt die App, wie es installiert werden soll.
 2. Unter **① Spiel** das Spiel wählen. Fehlt es, über **+ Steam-Spiel** oder **+ Lokales Spiel** hinzufügen.

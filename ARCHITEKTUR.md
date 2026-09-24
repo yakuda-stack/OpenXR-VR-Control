@@ -39,3 +39,16 @@ lesen und sich nicht gegenseitig als „fremde Installation“ sehen.
 
 Nachziehen aus Yakuda Connect: Dateien mit Herkunft „YC, unverändert“ einfach kopieren;
 bei den angepassten Dateien die Änderung per Diff übernehmen.
+
+## Release
+
+| Datei | Aufgabe |
+|---|---|
+| `core/version.py` | **einzige** Quelle der Versionsnummer |
+| `scripts/bump_version.py` | setzt/prüft Version in version.py, PKGBUILD, `.SRCINFO`, README-Badge; legt in CHANGELOG/HIGHLIGHTS die Überschrift an |
+| `build_appimage.sh` | AppImage + `.zsync` nach `build/` (type2-Runtime, fuse2 + fuse3) |
+| `packaging/aur/PKGBUILD` + `.SRCINFO` | Kopie fürs Projekt (echtes AUR-Repo: `~/aur/openxr-vr-control`) |
+| `install.sh` | curl-Installer (Arch, Fedora, Debian/Ubuntu, openSUSE) nach `/opt/openxr-vr-control` |
+| `openxr-vr-control.desktop` / `.desktop.download` | `/opt`-Variante (install.sh-Stil) / Variante ohne Pfade (AUR, AppImage) |
+
+Alles läuft auch über `~/Schreibtisch/projects/release_launcher.py` (Projekt „OpenXR/VR-Controls“).
