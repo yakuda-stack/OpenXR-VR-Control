@@ -13,6 +13,7 @@
   <a href="https://discord.gg/ShNKvvZu74"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
   <a href="https://ko-fi.com/yakuda_"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/></a>
   <a href="https://github.com/yakuda-stack/OpenXR-VR-Control/releases"><img src="https://img.shields.io/badge/Version-v1.0.0-81a1c1?style=for-the-badge" alt="Version"/></a>
+  <a href="https://aur.archlinux.org/packages/openxr-vr-control"><img src="https://img.shields.io/badge/AUR-openxr--vr--control-1793D1?style=for-the-badge&logo=archlinux&logoColor=white" alt="AUR"/></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-read-a3be8c?style=for-the-badge" alt="Changelog"/></a>
   <img src="https://img.shields.io/badge/License-GPL--3.0-4c566a?style=for-the-badge" alt="License"/>
 </p>
@@ -37,11 +38,21 @@
 
 | Your system | How |
 |---|---|
-| **Arch · CachyOS · EndeavourOS · Manjaro** | AUR: `yay -S openxr-vr-control` |
+| **Arch · CachyOS · EndeavourOS · Manjaro** | [AUR](https://aur.archlinux.org/packages/openxr-vr-control) (below) |
 | **Fedora · Nobara** | curl installer (below) |
 | **Debian · Ubuntu · Linux Mint · Pop!_OS** | curl installer (below) |
 | **openSUSE** | curl installer (below) |
 | **Any distro · Bazzite · SteamOS** | AppImage from the [Releases](https://github.com/yakuda-stack/OpenXR-VR-Control/releases) |
+
+### AUR (Arch, CachyOS, EndeavourOS, Manjaro)
+
+```bash
+paru -S openxr-vr-control
+# or
+yay -S openxr-vr-control
+```
+
+Prefer a GUI? Search for **openxr-vr-control** in **Shelly** (or any other AUR-capable package manager). Updates come with your normal system update. AUR page: [aur.archlinux.org/packages/openxr-vr-control](https://aur.archlinux.org/packages/openxr-vr-control)
 
 ### curl installer (Fedora, Debian/Ubuntu, openSUSE — and Arch too)
 
@@ -149,7 +160,7 @@ Für alle, die unter Linux VR spielen, aber **keine** Pico oder Quest haben: Val
 
 ### 📦 Installieren
 
-- **Arch / CachyOS:** `yay -S openxr-vr-control`
+- **Arch / CachyOS (AUR):** `paru -S openxr-vr-control` oder `yay -S openxr-vr-control` – oder per Oberfläche in **Shelly** nach „openxr-vr-control“ suchen. Updates kommen mit dem normalen System-Update. [AUR-Seite](https://aur.archlinux.org/packages/openxr-vr-control)
 - **Fedora, Debian/Ubuntu/Mint, openSUSE:**
   ```bash
   bash <(curl -s https://raw.githubusercontent.com/yakuda-stack/OpenXR-VR-Control/main/install.sh)
