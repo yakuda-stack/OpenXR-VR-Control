@@ -89,7 +89,8 @@ class AboutDialog(QDialog):
         # ---- Hilfe
         help_row = QHBoxLayout()
         help_row.setSpacing(8)
-        for text, fn in ((tr("about_report_bug"), lambda: _open(links.ISSUES)),
+        for text, fn in ((tr("about_changelog"), self._show_changelog),
+                         (tr("about_report_bug"), lambda: _open(links.ISSUES)),
                          (tr("about_open_log"),
                           lambda: _open(QUrl.fromLocalFile(paths.cache_root()).toString()))):
             b = QPushButton(text)
@@ -124,6 +125,10 @@ class AboutDialog(QDialog):
         row.addStretch()
         row.addWidget(close)
         root.addLayout(row)
+
+    def _show_changelog(self):
+        from ui.changelog_dialog import ChangelogDialog
+        ChangelogDialog(self).exec()
 
     def _card(self, title, entries):
         card = QFrame()

@@ -2,7 +2,7 @@
 
 Ausführliche Änderungen je Version (DE + EN). Kurzfassung für Nutzer: [HIGHLIGHTS.md](HIGHLIGHTS.md).
 
-### 🚀 v0.1.0 — 2026-09-24
+### 🚀 v1.0.0 — 2026-09-24
 
 **🇩🇪 Erste Version**
 - Controls-Tab aus Yakuda Connect v1.3.7 als eigenes Programm: obah (OpenVR) und xrBinder (OpenXR) in einer Controller-Ansicht.
@@ -12,6 +12,8 @@ Ausführliche Änderungen je Version (DE + EN). Kurzfassung für Nutzer: [HIGHLI
 - Nutzt vorhandene xrBinder-/obah-Installationen aus Yakuda Connect mit (gemeinsame Einstellungen je Spiel).
 - Info-Fenster (Discord, Ko-fi, GitHub, Log-Ordner) und Fußleiste „Mehr von yakuda“.
 - Eigenes Icon, DE/EN, Einstellungen unter `~/.config/openxr-vr-control/`.
+- Changelog direkt in der App (ⓘ Info → 📜 Changelog).
+- Veröffentlicht als AUR-Paket (`openxr-vr-control`), AppImage (mit Delta-Updates über `.zsync`) und curl-Installer für Fedora, Debian/Ubuntu und openSUSE.
 
 **🇬🇧 First release**
 - The Controls tab from Yakuda Connect v1.3.7 as a standalone app: obah (OpenVR) and xrBinder (OpenXR) in one controller view.
@@ -21,3 +23,5 @@ Ausführliche Änderungen je Version (DE + EN). Kurzfassung für Nutzer: [HIGHLI
 - Reuses existing xrBinder/obah installations from Yakuda Connect (shared per-game settings).
 - Info window (Discord, Ko-fi, GitHub, log folder) and a "More from yakuda" footer.
 - Own icon, DE/EN, settings in `~/.config/openxr-vr-control/`.
+- Changelog right in the app (ⓘ Info → 📜 Changelog).
+- Published as AUR package (`openxr-vr-control`), AppImage (delta updates via `.zsync`) and a curl installer for Fedora, Debian/Ubuntu and openSUSE.

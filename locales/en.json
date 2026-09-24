@@ -1,5 +1,6 @@
 {
   "about_ai_note": "Developed with the support of AI coding assistants (Claude by Anthropic). Idea, architecture & design: yakuda.",
+  "about_changelog": "📜  Changelog",
   "about_close": "Close",
   "about_credits": "Thanks to",
   "about_more_apps": "More from yakuda",
@@ -46,6 +47,9 @@
   "bd_title": "Edit {input} bindings – {set}",
   "bd_window_title": "Edit {input} – {set}",
   "cancel": "Cancel",
+  "changelog_missing": "CHANGELOG.md is not included in this installation.\n\nOn GitHub: {url}",
+  "changelog_online": "🌐  View on GitHub",
+  "changelog_title": "Changelog – OpenXR/VR-Controls",
   "controls_busy_text": "Another installation is already running. Please wait until it's done, then switch this on again.",
   "controls_busy_title": "Installation already running",
   "controls_cancel": "Cancel",

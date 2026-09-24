@@ -1,6 +1,6 @@
 # Highlights — OpenXR/VR-Controls
 
-### 🚀 v0.1.0 — 2026-09-24
+### 🚀 v1.0.0 — 2026-09-24
 
 ---
 

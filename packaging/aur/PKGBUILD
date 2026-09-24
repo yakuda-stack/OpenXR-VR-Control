@@ -11,7 +11,7 @@
 # Von dort wird gepusht — nicht von hier.
 
 pkgname=openxr-vr-control
-pkgver=0.1.0
+pkgver=1.0.0
 pkgrel=1
 pkgdesc="Controller bindings for OpenVR and OpenXR games on Linux (obah + xrBinder) with a GUI"
 arch=('any')
@@ -25,7 +25,7 @@ optdepends=('obah-git: OpenVR-Bindings (wird sonst per Cargo gebaut)'
             'yay: obah ueber den AUR installieren')
 provides=('openxr-vr-control')
 conflicts=('openxr-vr-control-git')
-# Tag-Format im Repo ist v<version> -> v0.1.0. Das Archiv von GitHub heisst
+# Tag-Format im Repo ist v<version> -> v1.0.0. Das Archiv von GitHub heisst
 # OpenXR-VR-Control-<version> (Repo-Name, nicht pkgname).
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Wird von 'updpkgsums' im AUR-Ordner gesetzt — NICHT von Hand eintragen.

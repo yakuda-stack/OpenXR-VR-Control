@@ -4,6 +4,8 @@
 GITHUB_ORG = "https://github.com/yakuda-stack"
 REPO = f"{GITHUB_ORG}/OpenXR-VR-Control"
 ISSUES = f"{REPO}/issues"
+CHANGELOG = f"{REPO}/blob/main/CHANGELOG.md"
+RELEASES = f"{REPO}/releases"
 DISCORD = "https://discord.gg/ShNKvvZu74"
 KOFI = "https://ko-fi.com/yakuda_"
 
