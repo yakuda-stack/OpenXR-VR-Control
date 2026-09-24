@@ -1,0 +1,5 @@
+# Laufzeit-Abhaengigkeiten (Python-Seite). Auf Arch besser:
+#   sudo pacman -S pyside6 python-setproctitle
+PySide6>=6.5
+# Optional: Prozessname in htop/btop
+setproctitle

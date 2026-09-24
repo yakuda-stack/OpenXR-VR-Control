@@ -1,0 +1,23 @@
+{
+  "_comment": "Werkzeuge fuer OpenXR-VR-Control (Format wie config/tools.json von Yakuda Connect).",
+  "apps": [
+    {
+      "key": "obah",
+      "name": "obah",
+      "pkg": "obah-git",
+      "category": "input",
+      "desc": "Terminal-Oberflaeche zum Bearbeiten von OpenVR-Bindings fuer xrizer, VapoR und OpenComposite — statt die JSON-Dateien von Hand zu schreiben. Findet Steam-Titel selbst; fuer Nicht-Steam-Titel den Spielordner uebergeben.",
+      "desc_eng": "Terminal UI for editing OpenVR bindings for xrizer, VapoR and OpenComposite instead of writing the JSON by hand. Finds Steam titles on its own; pass the game folder for non-Steam titles.",
+      "start_cmd": "obah",
+      "terminal": true,
+      "link": "https://github.com/galister/obah",
+      "install_methods": [
+        "aur",
+        "cargo"
+      ],
+      "crate": "obah",
+      "note": "Laeuft im Terminal (TUI), nicht als Fenster — fuer Autostart daher wenig sinnvoll. Methode \"Cargo\" funktioniert auf jeder Distro: baut obah nach ~/.config/openxr-vr-control/tools/cargo/obah und installiert Rust bei Bedarf mit.",
+      "note_eng": "Runs in the terminal (TUI), not as a window — so it makes little sense for autostart. The \"Cargo\" method works on any distro: builds obah into ~/.config/openxr-vr-control/tools/cargo/obah and installs Rust if needed."
+    }
+  ]
+}

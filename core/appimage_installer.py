@@ -1,0 +1,1119 @@
+#!/usr/bin/env python3
+"""
+appimage_installer.py — AppImage-basierte Installation für yakuda-connect
+=========================================================================
+Alternative zur AUR-/yay-Installation: Tools, die in programs.py mit
+``"install_type": "appimage"`` markiert sind, werden NICHT über yay
+installiert, sondern als AppImage direkt von GitHub geholt.
+
+Beispiel-Ablauf für OSC Leash (key="oscleash", start_cmd="oscleash_app"):
+
+  1. Ordnerstruktur anlegen (falls noch nicht vorhanden):
+        ~/.config/openxr-vr-control/tools/
+        ~/.config/openxr-vr-control/tools/oscleash/
+        ~/.config/openxr-vr-control/tools/desktop/
+
+  2. AppImage in den Tool-Ordner herunterladen:
+        ~/.config/openxr-vr-control/tools/oscleash/OSCLeash-x86_64.AppImage
+
+  3. AppImage ausführbar machen (chmod +x).
+
+  4. Terminal-Befehl per Symlink bereitstellen:
+        ~/.local/bin/oscleash_app  ->  .../oscleash/OSCLeash-x86_64.AppImage
+     (Symlink, weil /usr auf SteamOS read-only ist – ~/.local/bin ist
+      beschreibbar und liegt im PATH.)
+
+  5. Icon aus dem Repository laden:
+        ~/.config/openxr-vr-control/tools/oscleash/icon.png
+
+  6. .desktop-Datei schreiben und per Symlink für KDE/Plasma sichtbar machen:
+        ~/.config/openxr-vr-control/tools/desktop/oscleash.desktop
+        ~/.local/share/applications/yakuda-oscleash.desktop  (Symlink)
+
+Alle Schreibziele liegen unter $HOME und sind daher auch auf SteamOS
+beschreibbar.
+"""
+import os
+import json
+import stat
+import glob
+import shutil
+import subprocess
+import time
+import platform
+import urllib.request
+import urllib.error
+
+from PySide6.QtCore import QThread, Signal
+
+from logging_setup import get_logger
+import proc
+
+log = get_logger("appimage_installer")
+
+
+HOME = os.path.expanduser("~")
+import paths as _paths
+TOOLS_DIR        = _paths.tools_dir()
+DESKTOP_SRC_DIR  = os.path.join(TOOLS_DIR, "desktop")
+LOCAL_BIN        = os.path.join(HOME, ".local/bin")
+APPLICATIONS_DIR = os.path.join(HOME, ".local/share/applications")
+
+
+# --------------------------------------------------------------------------- #
+#  Pfad-Helfer (pro Tool)
+# --------------------------------------------------------------------------- #
+def _tool_dir(tool):
+    return os.path.join(TOOLS_DIR, tool["key"])
+
+
+def _appimage_filename(tool):
+    # GitHub-Tools: stabiler Dateiname, damit der Symlink beim Update gleich bleibt
+    if tool.get("github_repo"):
+        return f"{tool['key']}.AppImage"
+    url = tool.get("appimage_url", "")
+    name = os.path.basename(url.split("?")[0])
+    return name or f"{tool['key']}.AppImage"
+
+
+def _appimage_path(tool):
+    return os.path.join(_tool_dir(tool), _appimage_filename(tool))
+
+
+def _icon_path(tool):
+    return os.path.join(_tool_dir(tool), "icon.png")
+
+
+def _bin_link(tool):
+    """Pfad des Terminal-Befehls (z. B. ~/.local/bin/oscleash_app)."""
+    cmd = tool.get("start_cmd") or tool["key"]
+    return os.path.join(LOCAL_BIN, cmd)
+
+
+def _desktop_src(tool):
+    """Die 'echte' .desktop-Datei im yakuda-Ordner."""
+    return os.path.join(DESKTOP_SRC_DIR, f"{tool['key']}.desktop")
+
+
+def _desktop_link(tool):
+    """Symlink im KDE-Anwendungsordner (eindeutiger Name mit yakuda-Präfix)."""
+    return os.path.join(APPLICATIONS_DIR, f"yakuda-{tool['key']}.desktop")
+
+
+def _marker(tool):
+    """Kleine Marker-Datei mit der installierten Version."""
+    return os.path.join(_tool_dir(tool), ".installed.json")
+
+
+def _raw_github(url):
+    """Wandelt eine GitHub 'blob'-URL in eine raw-URL um (idempotent)."""
+    if "github.com" in url and "/blob/" in url:
+        url = url.replace("https://github.com/", "https://raw.githubusercontent.com/")
+        url = url.replace("/blob/", "/")
+    return url
+
+
+# --------------------------------------------------------------------------- #
+#  GitHub-Release-Auflösung (für "immer neueste AppImage")
+# --------------------------------------------------------------------------- #
+class RateLimited(Exception):
+    """GitHub-API hat das Anfragelimit gemeldet (HTTP 403)."""
+    pass
+
+
+_RELEASE_CACHE = {}      # (repo, asset_match) -> (timestamp, url, version)
+_RELEASE_CACHE_TTL = 900  # 15 Minuten — vermeidet zu viele API-Anfragen
+
+
+def _api_get(url):
+    """GET auf die GitHub-API. Wirft RateLimited bei HTTP 403."""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "openxr-vr-control",
+        "Accept": "application/vnd.github+json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise RateLimited(
+                "GitHub-API-Limit erreicht (zu viele Anfragen pro Stunde). "
+                "Bitte etwas warten und erneut versuchen."
+            )
+        raise
+
+
+def _arch_tokens():
+    """(bevorzugte, zu vermeidende) Architektur-Schlüsselwörter für dieses System."""
+    m = (platform.machine() or "").lower()
+    if m in ("x86_64", "amd64"):
+        return (["x86_64", "amd64", "x64"],
+                ["arm64", "aarch64", "armhf", "armv7", "i686", "i386"])
+    if m in ("aarch64", "arm64"):
+        return (["arm64", "aarch64"],
+                ["x86_64", "amd64", "x64", "i686", "i386"])
+    return ([m] if m else [], [])
+
+
+def _pick_appimage_asset(assets, match=".AppImage"):
+    """
+    Wählt das passende AppImage-Asset.
+      * Ist 'match' architektur-spezifisch gesetzt (z. B. '_x64.AppImage' oder
+        'x86_64.AppImage'), wird genau das erste passende Asset genommen.
+      * Ist 'match' der Standard '.AppImage', wird die Architektur automatisch
+        erkannt (x64/x86_64 bevorzugt, arm64 etc. vermieden).
+    """
+    match_l = (match or ".AppImage").lower()
+    cands = [a for a in assets if match_l in a.get("name", "").lower()]
+    if not cands:
+        return None, None
+
+    # Reine Dateiendung -> Architektur selbst erkennen. Wichtig: SlimeVR legt
+    # 'SlimeVR-aarch64.rpm' VOR 'SlimeVR-amd64.rpm' ab. Wer hier einfach den
+    # ersten Treffer nimmt, laedt auf einem normalen PC das ARM-Paket.
+    GENERIC = (".appimage", ".rpm", ".deb")
+    if match_l not in GENERIC:
+        return cands[0]["browser_download_url"], cands[0]["name"]
+
+    # sonst: automatische Architektur-Erkennung
+    prefer, avoid = _arch_tokens()
+    for tok in prefer:
+        for a in cands:
+            if tok in a["name"].lower():
+                return a["browser_download_url"], a["name"]
+
+    # kein arch-Treffer: nur Assets ohne fremde Architektur zulassen
+    neutral = [a for a in cands if not any(x in a["name"].lower() for x in avoid)]
+    if neutral:
+        return neutral[0]["browser_download_url"], neutral[0]["name"]
+
+    return None, None
+
+
+def _resolve_release_uncached(tool):
+    repo = tool["github_repo"]
+    match = tool.get("asset_match", ".AppImage")
+    include_pre = tool.get("include_prerelease", False)
+
+    releases = []
+    # Nur stabile Releases? Dann reicht ein einziger API-Aufruf (/releases/latest).
+    if not include_pre:
+        try:
+            rel = _api_get(f"https://api.github.com/repos/{repo}/releases/latest")
+            if isinstance(rel, dict) and rel.get("assets") is not None:
+                releases = [rel]
+        except RateLimited:
+            raise
+        except Exception:
+            releases = []
+    # sonst (oder falls latest leer war) die Liste durchsuchen
+    if not releases:
+        data = _api_get(f"https://api.github.com/repos/{repo}/releases?per_page=15")
+        releases = data if isinstance(data, list) else []
+
+    for rel in releases:
+        if rel.get("draft"):
+            continue
+        if rel.get("prerelease") and not include_pre:
+            continue
+        url, _name = _pick_appimage_asset(rel.get("assets", []), match)
+        if url:
+            return url, rel.get("tag_name", "")
+    return None, ""
+
+
+def resolve_release(tool):
+    """
+    Liefert (download_url, version). Bei github_repo wird die neueste passende
+    Release per API gesucht (für die aktuelle Architektur). Der AppImage-Name
+    darf sich pro Version ändern — es zählt nur das Asset aus der API.
+    Wirft RateLimited bei API-Limit; andere Netzfehler werden durchgereicht.
+    """
+    repo = tool.get("github_repo")
+    if not repo:
+        return tool.get("appimage_url"), tool.get("version", "")
+
+    now = time.time()
+    # Ein Repo kann mehrere Asset-Arten haben (AppImage UND RPM). Der Schluessel
+    # muss beides enthalten, sonst bekommt die RPM-Abfrage die gemerkte
+    # AppImage-URL zurueck.
+    key = (repo, tool.get("asset_match", ".AppImage"))
+    cached = _RELEASE_CACHE.get(key)
+    if cached and (now - cached[0]) < _RELEASE_CACHE_TTL:
+        return cached[1], cached[2]
+
+    url, ver = _resolve_release_uncached(tool)
+    if url:
+        _RELEASE_CACHE[key] = (now, url, ver)
+    return url, ver
+
+
+def latest_version(tool):
+    """Neueste verfügbare Version/Tag (für den Update-Check). Schluckt Fehler -> ''."""
+    repo = tool.get("github_repo")
+    if not repo:
+        return tool.get("version", "")
+    try:
+        _url, ver = resolve_release(tool)
+        return ver or ""
+    except Exception:
+        return ""
+
+
+# --------------------------------------------------------------------------- #
+#  Installationsmethoden (AppImage / yay / paru) – distro-abhängig
+# --------------------------------------------------------------------------- #
+def is_package_managed_install():
+    """
+    True, wenn yakuda-connect aus einem Distributionspaket läuft (z. B. AUR:
+    /usr/share/yakuda-connect). Dann darf sich die App NICHT selbst updaten —
+    das würde an pacman vorbei eine zweite Kopie unter /opt anlegen und die
+    Paketverwaltung zerschießen. Updates laufen dort über yay/paru.
+
+    False bei install.sh (/opt/yakuda-connect) und beim Start aus dem Quellcode.
+    """
+    here = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+    return here.startswith("/usr/")
+
+
+def is_arch_based():
+    """True, wenn die Distro auf Arch basiert (pacman/yay/paru-Welt)."""
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                low = line.strip().lower()
+                if low.startswith("id=") and "arch" in low:
+                    return True
+                if low.startswith("id_like=") and "arch" in low:
+                    return True
+    except Exception as exc:
+        log.debug("is_arch_based: ignoriert — %s", exc)
+    return shutil.which("pacman") is not None
+
+
+def _os_release_ids():
+    """(id, id_like) aus /etc/os-release, alles lowercase."""
+    osid, idlike = "", ""
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                low = line.strip().lower()
+                if low.startswith("id="):
+                    osid = low[3:].strip('"')
+                elif low.startswith("id_like="):
+                    idlike = low[8:].strip('"')
+    except Exception as exc:
+        log.debug("_os_release_ids: ignoriert — %s", exc)
+    return osid, idlike
+
+
+def is_steamos():
+    """
+    SteamOS (Steam Deck) und aehnliche schreibgeschuetzte Arch-Abkoemmlinge
+    (ChimeraOS). ID_LIKE ist dort 'arch' und pacman liegt im PATH — trotzdem
+    darf nichts ins System installiert werden (/usr ist read-only, das
+    Paket-Keyring ist nicht eingerichtet). WiVRn kommt hier als Flatpak.
+    """
+    osid, _idlike = _os_release_ids()
+    return osid in ("steamos", "chimeraos")
+
+
+def is_fedora_based():
+    """True auf Fedora und Ableitungen (Nobara, Bazzite, ...)."""
+    osid, idlike = _os_release_ids()
+    if "fedora" in osid or "fedora" in idlike or "rhel" in idlike:
+        return True
+    return (not is_arch_based()) and shutil.which("dnf") is not None
+
+
+def is_debian_based():
+    """True auf Ubuntu/Debian und Ableitungen (Mint, Pop!_OS, ...)."""
+    osid, idlike = _os_release_ids()
+    if osid in ("ubuntu", "debian") or "debian" in idlike or "ubuntu" in idlike:
+        return True
+    return (not is_arch_based()) and (not is_fedora_based()) \
+        and shutil.which("apt") is not None
+
+
+def available_aur_helpers():
+    """Installierte AUR-Helfer (['yay','paru'], yay zuerst) – nur auf Arch-Basis."""
+    if not is_arch_based():
+        return []
+    return [h for h in ("yay", "paru") if shutil.which(h)]
+
+
+def supported_methods(tool):
+    """Abstrakte Methoden, die das Tool unterstützt – Teilmenge von {'appimage','aur'}.
+
+    Eine LEERE Liste ist eine Aussage ("dieses Tool ist von hier aus nicht
+    installierbar") und keine fehlende Angabe. Deshalb 'in tool' statt
+    'if m:' — sonst landen Tools wie VIVE
+    Hub (nur als Tarball von HTC) in der AUR-Rueckfallzeile und bekaemen
+    einen Install-Knopf, der 'yay -S <paket>' auf ein nicht existierendes
+    Paket loslaesst. Solche Tools zeigen nur ihren note-Hinweis.
+    """
+    if "install_methods" in tool:
+        return list(tool.get("install_methods") or [])
+    if tool.get("install_type") == "appimage" or tool.get("github_repo") or tool.get("appimage_url"):
+        return ["appimage"]
+    return ["aur"]
+
+
+def detect_install_methods(tool):
+    """
+    Konkrete, auf diesem System verfügbare Methoden (geordnet).
+    Reihenfolge = Vorauswahl-Reihenfolge: appimage zuerst, dann yay, paru, flatpak.
+      * Arch-Distros: yay/paru verfügbar (falls installiert).
+      * Alle Distros : AppImage und – falls flatpak installiert + flatpak_id gesetzt – Flatpak.
+    """
+    supported = supported_methods(tool)
+    methods = []
+    if "appimage" in supported and (tool.get("github_repo") or tool.get("appimage_url")):
+        methods.append("appimage")
+    if "aur" in supported and tool.get("pkg"):
+        methods.extend(available_aur_helpers())   # yay vor paru
+    if "cargo" in supported:
+        # Distro-unabhaengig: fehlendes Rust/Cargo zieht das Installations-
+        # skript selbst nach (siehe core/cargo_installer.py).
+        methods.append("cargo")
+    if "rpm" in supported and tool.get("github_repo") and dnf_available():
+        # Nur auf Systemen mit dnf anbieten — ein RPM auf Arch waere sinnlos.
+        methods.append("rpm")
+    if "flatpak" in supported and tool.get("flatpak_id") and flatpak_available():
+        methods.append("flatpak")
+    return methods
+
+
+def ubuntu_codename():
+    """
+    Der UBUNTU-Codename des Systems ("noble", "jammy", ...) oder "".
+
+    Wichtig fuer Linux Mint: 'lsb_release -cs' liefert dort den MINT-Namen
+    ('zena', 'xia', 'virginia'), nicht den der Ubuntu-Basis. In
+    /etc/os-release steht dagegen UBUNTU_CODENAME — und genau danach richten
+    sich die PPAs.
+    """
+    data = {}
+    try:
+        with open("/etc/os-release", encoding="utf-8") as fh:
+            for line in fh:
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    data[key.strip()] = value.strip().strip('"').strip("'")
+    except OSError:
+        return ""
+    return data.get("UBUNTU_CODENAME") or data.get("VERSION_CODENAME") or ""
+
+
+def ppa_supports_codename(owner_repo, codename, timeout=6):
+    """
+    Baut diese PPA fuer diese Ubuntu-Ausgabe? True / False / None (unklar).
+
+    Geprueft wird, ob es die Release-Datei der Ausgabe gibt. Ohne diese
+    Vorabpruefung laeuft der Nutzer in
+    'Cannot add PPA: This PPA does not support noble' — eine Meldung, die
+    mitten in einer laufenden Installation auftaucht und wie ein Fehler der
+    App aussieht, obwohl schlicht kein Paket existiert.
+
+    None bedeutet: nicht erreichbar (kein Netz, Launchpad down). Dann wird
+    NICHT blockiert — lieber der Versuch als eine falsche Absage.
+    """
+    if not codename:
+        return None
+    owner_repo = owner_repo.replace("ppa:", "")
+    url = (f"https://ppa.launchpadcontent.net/{owner_repo}/ubuntu/"
+           f"dists/{codename}/Release")
+    req = urllib.request.Request(url, method="HEAD",
+                                 headers={"User-Agent": "openxr-vr-control"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return 200 <= r.status < 300
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        log.debug("PPA-Pruefung fehlgeschlagen: %s", exc)
+        return None
+
+
+def flatpak_app_installed(app_id):
+    """True, wenn diese Flatpak-Anwendung installiert ist (Benutzer ODER System)."""
+    if not shutil.which("flatpak"):
+        return False
+    res = proc.run(["flatpak", "info", app_id],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   timeout=proc.DEFAULT_TIMEOUT)
+    return res.returncode == 0
+
+
+def dnf_available():
+    """True, wenn dnf da ist — also Fedora/Nobara & Verwandte."""
+    return shutil.which("dnf") is not None
+
+
+def rpm_tool_view(tool):
+    """
+    Sicht auf ein Tool, bei der resolve_release() das RPM statt der AppImage
+    findet. Das Original wird nicht angefasst — es wird nur das Asset-Muster
+    getauscht.
+    """
+    view = dict(tool)
+    view["asset_match"] = tool.get("rpm_asset_match", ".rpm")
+    return view
+
+
+def resolve_rpm(tool):
+    """(url, version) des passenden RPMs aus dem neuesten Release."""
+    return resolve_release(rpm_tool_view(tool))
+
+
+def flatpak_available():
+    """True, wenn 'flatpak' installiert ist (distro-unabhängig)."""
+    return shutil.which("flatpak") is not None
+
+
+def flathub_remote_present():
+    """True, wenn das Flathub-Remote in Flatpak eingerichtet ist."""
+    if not flatpak_available():
+        return False
+    try:
+        res = subprocess.run(["flatpak", "remotes"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=proc.LONG_TIMEOUT)
+        return res.returncode == 0 and "flathub" in res.stdout.lower()
+    except Exception:
+        return False
+
+
+def add_flathub_remote():
+    """Fügt das Flathub-Remote auf User-Ebene hinzu (ohne root). True bei Erfolg."""
+    if not flatpak_available():
+        return False
+    try:
+        res = subprocess.run(
+            ["flatpak", "remote-add", "--if-not-exists", "--user",
+             "flathub", "https://flathub.org/repo/flathub.flatpakrepo"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=proc.LONG_TIMEOUT)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def is_nixos():
+    """True, wenn das System NixOS ist (laut /etc/os-release)."""
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                low = line.strip().lower()
+                if low.startswith("id=") and "nixos" in low:
+                    return True
+                if low.startswith("id_like=") and "nixos" in low:
+                    return True
+    except Exception as exc:
+        log.debug("is_nixos: ignoriert — %s", exc)
+    return False
+
+
+def flatpak_query(tool):
+    """(installiert, version) per 'flatpak info <id>'."""
+    fid = tool.get("flatpak_id")
+    if not fid or not flatpak_available():
+        return False, ""
+    res = proc.run(["flatpak", "info", fid],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=proc.LONG_TIMEOUT)
+    if res.returncode != 0:
+        return False, ""
+    version = ""
+    for line in res.stdout.splitlines():
+        l = line.strip()
+        if l.lower().startswith("version:"):
+            version = l.split(":", 1)[1].strip()
+            break
+    return True, version
+
+
+def default_method(methods):
+    """Vorauswahl-Priorität: AppImage -> yay -> flatpak -> erstes."""
+    for pref in ("appimage", "yay", "flatpak"):
+        if pref in methods:
+            return pref
+    return methods[0] if methods else ""
+
+
+def available_update_methods():
+    """
+    Verfügbare Methoden für den Installations-Tab (nur noch NATIV, kein Flatpak):
+      Arch    -> yay/paru
+      Fedora  -> dnf (offizielle Repos: wivrn + opencomposite)
+      Ubuntu  -> apt (WiVRn aus der LVRA-PPA, xrizer aus dem GitHub-Release)
+      Sonst   -> 'native', falls WiVRn selbst nativ installiert wurde.
+    """
+    methods = []
+    if is_steamos():
+        # Kein AUR, kein pacman: das System ist schreibgeschuetzt. WiVRn
+        # gibt es fuer SteamOS als Flatpak (Flathub), der bringt xrizer und
+        # OpenComposite gleich mit.
+        if shutil.which("flatpak"):
+            methods.append("flatpak")
+        return methods
+    if is_arch_based():
+        methods.extend(available_aur_helpers())     # yay vor paru
+    elif is_fedora_based():
+        if shutil.which("dnf"):
+            methods.append("dnf")
+    elif is_debian_based():
+        # Bis v1.2.3 gab es hier nur eine Kurzanleitung zum Abtippen. WiVRn
+        # liegt inzwischen als Paket in der LVRA-PPA, damit ist auch auf
+        # Ubuntu/Mint/Debian eine richtige Installation moeglich.
+        if shutil.which("apt-get"):
+            methods.append("apt")
+    else:
+        # Unbekannte Distro (z. B. NixOS): hat die Person WiVRn selbst installiert?
+        if wivrn_native_present():
+            methods.append("native")
+    return methods
+
+
+def wivrn_native_present():
+    """True, wenn eine native wivrn-server-Binary im PATH liegt (kein Flatpak)."""
+    return shutil.which("wivrn-server") is not None
+
+
+def default_update_method(methods):
+    """Vorauswahl: yay -> paru -> dnf -> apt -> native -> erstes."""
+    for pref in ("yay", "paru", "dnf", "apt", "flatpak", "native"):
+        if pref in methods:
+            return pref
+    return methods[0] if methods else ""
+
+
+def pm_query(tool, helper):
+    """(installiert, version, update) per yay/paru -Q. helper: 'yay' oder 'paru'."""
+    pkg = tool.get("pkg")
+    if not pkg or not shutil.which(helper):
+        return False, "", False
+    res = proc.run([helper, "-Q", pkg],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=proc.DEFAULT_TIMEOUT)
+    if res.returncode != 0:
+        return False, "", False
+    version = res.stdout.strip().split()[-1] if res.stdout.strip() else ""
+    res_u = proc.run([helper, "-Qu", pkg],
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=proc.DEFAULT_TIMEOUT)
+    has_update = res_u.returncode == 0 and bool(res_u.stdout.strip())
+    return True, version, has_update
+
+
+def compute_status(tool):
+    """
+    Voller Statusbericht eines Tools (als dict):
+      appimage_installed / appimage_version / appimage_has_update
+      pm_installed / pm_helper / pm_version / pm_has_update
+      config_present
+    """
+    st = {
+        "appimage_installed": False, "appimage_version": "", "appimage_has_update": False,
+        "pm_installed": False, "pm_helper": "", "pm_version": "", "pm_has_update": False,
+        "flatpak_installed": False, "flatpak_version": "",
+        "cargo_installed": False, "cargo_version": "", "cargo_has_update": False,
+        "config_present": False,
+    }
+    supported = supported_methods(tool)
+
+    if "appimage" in supported and (tool.get("github_repo") or tool.get("appimage_url")):
+        inst, ver = local_status(tool)
+        st["appimage_installed"] = inst
+        st["appimage_version"] = ver
+        if inst:
+            latest = latest_version(tool)
+            st["appimage_has_update"] = bool(latest and ver and latest != ver)
+
+    if "aur" in supported and tool.get("pkg"):
+        for h in available_aur_helpers():   # yay zuerst
+            ok, ver, upd = pm_query(tool, h)
+            if ok:
+                st["pm_installed"] = True
+                st["pm_helper"] = h
+                st["pm_version"] = ver
+                st["pm_has_update"] = upd
+                break
+
+    if "flatpak" in supported and tool.get("flatpak_id"):
+        ok, ver = flatpak_query(tool)
+        st["flatpak_installed"] = ok
+        st["flatpak_version"] = ver
+
+    if "cargo" in supported:
+        import cargo_installer   # spaet importiert: cargo_installer importiert dieses Modul
+        inst, ver = cargo_installer.local_status(tool)
+        st["cargo_installed"] = inst
+        st["cargo_version"] = ver
+        if inst:
+            st["cargo_has_update"] = cargo_installer.update_available(tool)
+
+    st["config_present"] = native_installed(tool)
+    return st
+
+
+def installed_locally(tool):
+    """
+    Ist das Tool auf irgendeinem Weg installiert? Rein lokal, ohne Netz —
+    fuer schnelle Pruefungen (Controls-Tab), nicht fuer den Update-Check.
+
+    Reihenfolge: eigener Cargo-Ordner, eigene AppImage, Flatpak,
+    yay/paru-Paket und zuletzt der Startbefehl im PATH (deckt auch ein von
+    Hand per 'cargo install' nach ~/.cargo/bin gebautes Tool ab).
+    """
+    supported = supported_methods(tool)
+    if "cargo" in supported:
+        import cargo_installer
+        if cargo_installer.local_status(tool)[0]:
+            return True
+    if (tool.get("github_repo") or tool.get("appimage_url")) and local_status(tool)[0]:
+        return True
+    if tool.get("flatpak_id") and flatpak_query(tool)[0]:
+        return True
+    if "aur" in supported and tool.get("pkg"):
+        for h in available_aur_helpers():
+            if pm_query(tool, h)[0]:
+                return True
+    cmd = tool.get("start_cmd")
+    if cmd and (shutil.which(cmd) or os.access(os.path.join(HOME, ".cargo", "bin", cmd), os.X_OK)
+                or os.access(os.path.join(LOCAL_BIN, cmd), os.X_OK)):
+        return True
+    # Von Yakuda Connect per Cargo gebaut (dessen Tools-Ordner)?
+    for root in (os.path.join(HOME, ".config", "yakuda-connect"),
+                 os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"),
+                              "yakuda-connect")):
+        if cmd and os.access(os.path.join(root, "tools", "cargo", tool.get("key", ""), "bin", cmd),
+                             os.X_OK):
+            return True
+    return False
+
+
+# --------------------------------------------------------------------------- #
+#  Bestehende Installation erkennen (distro-unabhängig, KEIN yay/pacman)
+# --------------------------------------------------------------------------- #
+def _config_dir_candidates(tool):
+    """Liste der zu prüfenden Konfigurationsordner unter ~/.config."""
+    dirs = tool.get("config_dirs") or []
+    if isinstance(dirs, str):
+        dirs = [dirs]
+    return [os.path.join(HOME, ".config", d) for d in dirs]
+
+
+def config_path_hint(tool):
+    """Gibt den (ersten) Konfigurationspfad als Hinweistext zurück, sonst ''."""
+    cands = _config_dir_candidates(tool)
+    if cands:
+        # mit ~ für die Anzeige
+        return cands[0].replace(HOME, "~", 1)
+    return ""
+
+
+def native_installed(tool):
+    """
+    True, wenn das Programm bereits eingerichtet wirkt – erkannt daran, dass ein
+    Konfigurationsordner in ~/.config existiert. Bewusst OHNE yay/pacman, damit
+    es auch auf anderen Systemen (Fedora, Ubuntu, ...) funktioniert.
+    """
+    for p in _config_dir_candidates(tool):
+        if os.path.isdir(p):
+            return True
+    return False
+
+
+# --------------------------------------------------------------------------- #
+#  Status / Deinstallation
+# --------------------------------------------------------------------------- #
+def status(tool):
+    """
+    Liefert (installed: bool, version: str, has_update: bool) für ein
+    AppImage-Tool – kompatibel zum Signal des ToolsStatusWorker.
+    """
+    link = _bin_link(tool)
+    app = _appimage_path(tool)
+    installed = (os.path.islink(link) or os.path.exists(link)) and os.path.exists(app)
+
+    version = ""
+    m = _marker(tool)
+    if os.path.exists(m):
+        try:
+            with open(m) as f:
+                version = json.load(f).get("version", "")
+        except Exception:
+            version = ""
+
+    target = tool.get("version", "")
+    has_update = bool(installed and target and version and version != target)
+    return installed, version, has_update
+
+
+def is_installed(tool):
+    return status(tool)[0]
+
+
+def local_status(tool):
+    """(installed, installed_version) – rein lokal, ohne Netzwerk."""
+    link = _bin_link(tool)
+    app = _appimage_path(tool)
+    installed = (os.path.islink(link) or os.path.exists(link)) and os.path.exists(app)
+    version = ""
+    m = _marker(tool)
+    if os.path.exists(m):
+        try:
+            with open(m) as f:
+                version = json.load(f).get("version", "")
+        except Exception:
+            version = ""
+    return installed, version
+
+
+def delete_config(tool):
+    """Löscht die in config_dirs angegebenen Ordner unter ~/.config (auf Wunsch)."""
+    removed = []
+    for p in _config_dir_candidates(tool):
+        try:
+            if os.path.isdir(p):
+                shutil.rmtree(p)
+                removed.append(p)
+        except Exception as e:
+            log.warning(f"[AppImage] Config konnte nicht gelöscht werden ({p}): {e}")
+    return removed
+
+
+def uninstall(tool):
+    """Entfernt Symlinks/Skripte und den Tool-Ordner wieder (PATH-Eintrag bleibt – harmlos)."""
+    for p in (_bin_link(tool), _desktop_link(tool)):
+        try:
+            if os.path.islink(p) or os.path.exists(p):
+                os.remove(p)
+        except Exception as exc:
+            log.debug("uninstall: ignoriert — %s", exc)
+    # auch vom Programm selbst angelegte Einträge entfernen
+    try:
+        _remove_foreign_entries(tool)
+    except Exception as exc:
+        log.debug("uninstall: ignoriert — %s", exc)
+    try:
+        if os.path.isdir(_tool_dir(tool)):
+            shutil.rmtree(_tool_dir(tool))
+    except Exception as exc:
+        log.debug("uninstall: ignoriert — %s", exc)
+    try:
+        if os.path.exists(_desktop_src(tool)):
+            os.remove(_desktop_src(tool))
+    except Exception as exc:
+        log.debug("uninstall: ignoriert — %s", exc)
+
+
+# --------------------------------------------------------------------------- #
+#  PATH / .desktop / Symlinks
+# --------------------------------------------------------------------------- #
+def _ensure_local_bin_on_path():
+    """
+    Sorgt dafür, dass ~/.local/bin im PATH liegt, damit der Terminal-Befehl
+    (z. B. 'oscleash_app') funktioniert. Idempotent – schreibt höchstens
+    einmal einen markierten Block in .bashrc/.zshrc.
+    """
+    if LOCAL_BIN in os.environ.get("PATH", "").split(":"):
+        return
+    marker = "openxr-vr-control: ~/.local/bin in PATH"
+    block = (
+        f"\n# {marker}\n"
+        'export PATH="$HOME/.local/bin:$PATH"\n'
+    )
+    for rc in (".bashrc", ".zshrc"):
+        rc_path = os.path.join(HOME, rc)
+        # .bashrc immer (Standard-Shell auf SteamOS), .zshrc nur falls vorhanden
+        if rc != ".bashrc" and not os.path.exists(rc_path):
+            continue
+        try:
+            existing = ""
+            if os.path.exists(rc_path):
+                with open(rc_path, errors="ignore") as f:
+                    existing = f.read()
+            if marker in existing:
+                continue
+            with open(rc_path, "a") as f:
+                f.write(block)
+        except Exception as exc:
+            log.debug("_ensure_local_bin_on_path: ignoriert — %s", exc)
+
+
+def _force_symlink(src, dst):
+    """Erstellt dst -> src; ein vorhandenes dst (Datei/Symlink) wird ersetzt."""
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    try:
+        if os.path.islink(dst) or os.path.exists(dst):
+            os.remove(dst)
+    except Exception as exc:
+        log.debug("_force_symlink: ignoriert — %s", exc)
+    os.symlink(src, dst)
+
+
+# Starter-Skript: startet die AppImage normal, wenn libfuse2 vorhanden ist –
+# sonst mit --appimage-extract-and-run (SteamOS/Steam Deck, Ubuntu ohne
+# libfuse2, Fedora, ...). So läuft es ohne Root und ohne Schreibzugriff auf /usr.
+_LAUNCHER_TEMPLATE = """#!/usr/bin/env bash
+# Automatisch erzeugt von openxr-vr-control – AppImage-Starter mit FUSE-Fallback.
+APPIMAGE="__APPIMAGE__"
+LAUNCH_ARGS=(__LAUNCH_ARGS__)
+
+if [ ! -x "$APPIMAGE" ]; then
+    chmod +x "$APPIMAGE" 2>/dev/null
+fi
+
+# Kann dieses System eine AppImage per FUSE einhaengen?
+#
+# Frueher wurde hier nur libfuse.so.2 gesucht. Das war zu eng: AppImages mit
+# dem neueren type2-runtime linken libfuse3 STATISCH — sie brauchen gar kein
+# libfuse-Paket, sondern nur /dev/fuse und fusermount3. Auf einem modernen
+# System (Fedora 40+, Ubuntu 24.04, Bazzite) fand die alte Pruefung nichts und
+# entpackte deshalb JEDES Mal ins Temp-Verzeichnis — unnoetig langsam.
+#
+# Jetzt gilt: /dev/fuse muss da sein UND entweder ein fusermount-Programm
+# (beliebige Version) oder libfuse in Version 2 oder 3.
+have_fuse() {
+    [ -e /dev/fuse ] || return 1
+
+    command -v fusermount3 >/dev/null 2>&1 && return 0
+    command -v fusermount  >/dev/null 2>&1 && return 0
+
+    if command -v ldconfig >/dev/null 2>&1; then
+        ldconfig -p 2>/dev/null | grep -qiE 'libfuse\\.so\\.(2|3)' && return 0
+    fi
+    for d in /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu /lib /lib64 /lib/x86_64-linux-gnu; do
+        [ -e "$d/libfuse.so.2" ] && return 0
+        [ -e "$d/libfuse3.so.3" ] && return 0
+        [ -e "$d/libfuse.so.3" ] && return 0
+    done
+    return 1
+}
+
+if [ -n "${YAKUDA_APPIMAGE_EXTRACT:-}" ]; then
+    # Notausgang von Hand: YAKUDA_APPIMAGE_EXTRACT=1 <programm>
+    exec "$APPIMAGE" --appimage-extract-and-run "${LAUNCH_ARGS[@]}" "$@"
+fi
+
+if have_fuse; then
+    # Normalfall: direkt starten. Scheitert der Start am Einhaengen (falsche
+    # libfuse-Version, fuse-Modul nicht geladen, kein Recht auf /dev/fuse),
+    # meldet sich die Runtime mit Exitcode 1 und einer Zeile, in der "fuse"
+    # vorkommt — dann wird einmalig entpackt gestartet. Ohne diesen Rueckfall
+    # saehe der Nutzer nur eine kryptische dlopen-Meldung.
+    ERR="$(mktemp)"
+    "$APPIMAGE" "${LAUNCH_ARGS[@]}" "$@" 2> >(tee "$ERR" >&2)
+    RC=$?
+    if [ $RC -ne 0 ] && grep -qi 'fuse' "$ERR"; then
+        rm -f "$ERR"
+        exec "$APPIMAGE" --appimage-extract-and-run "${LAUNCH_ARGS[@]}" "$@"
+    fi
+    rm -f "$ERR"
+    exit $RC
+else
+    exec "$APPIMAGE" --appimage-extract-and-run "${LAUNCH_ARGS[@]}" "$@"
+fi
+"""
+
+
+def _write_launcher(tool):
+    """Schreibt das FUSE-sichere Starter-Skript nach ~/.local/bin/<start_cmd>."""
+    link = _bin_link(tool)
+    os.makedirs(os.path.dirname(link), exist_ok=True)
+    try:
+        if os.path.islink(link) or os.path.exists(link):
+            os.remove(link)
+    except Exception as exc:
+        log.debug("_write_launcher: ignoriert — %s", exc)
+    args = (tool.get("launch_args") or "").strip()
+    script = (_LAUNCHER_TEMPLATE
+              .replace("__APPIMAGE__", _appimage_path(tool))
+              .replace("__LAUNCH_ARGS__", args))
+    with open(link, "w") as f:
+        f.write(script)
+    st = os.stat(link)
+    os.chmod(link, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return link
+
+
+def _remove_foreign_entries(tool):
+    """
+    Entfernt vom Programm selbst angelegte Desktop-/Autostart-Einträge
+    (Pfade aus 'remove_entries', z. B. VRCX.desktop in applications und
+    autostart), damit nur unser eigener Eintrag übrig bleibt.
+    """
+    removed = []
+    own = os.path.abspath(_desktop_link(tool))
+    for raw in (tool.get("remove_entries") or []):
+        pattern = os.path.expanduser(raw)
+        for p in glob.glob(pattern):
+            if os.path.abspath(p) == own:
+                continue  # niemals unseren eigenen Eintrag löschen
+            try:
+                if os.path.islink(p) or os.path.isfile(p):
+                    os.remove(p)
+                    removed.append(p)
+            except Exception as e:
+                log.warning(f"[AppImage] Konnte Eintrag nicht entfernen ({p}): {e}")
+    return removed
+
+
+def _write_desktop_file(tool):
+    """Schreibt die .desktop-Datei in den yakuda-Ordner und gibt ihren Pfad zurück."""
+    os.makedirs(DESKTOP_SRC_DIR, exist_ok=True)
+    name = tool.get("name", tool["key"])
+    comment = tool.get("desc_eng") or tool.get("desc", "")
+    exec_path = _bin_link(tool)   # Starter-Skript (mit FUSE-Fallback)
+    icon = _icon_path(tool)
+
+    lines = [
+        "[Desktop Entry]",
+        "Type=Application",
+        f"Name={name}",
+    ]
+    if comment:
+        lines.append(f"Comment={comment}")
+    # Exec auf das Starter-Skript -> auch in der KDE-Sitzung FUSE-sicher.
+    lines.append(f'Exec="{exec_path}"')
+    if os.path.exists(icon):
+        lines.append(f"Icon={icon}")
+    lines += [
+        "Terminal=false",
+        "Categories=Utility;Game;",
+        f"X-Yakuda-Tool={tool['key']}",
+        "",
+    ]
+    with open(_desktop_src(tool), "w") as f:
+        f.write("\n".join(lines))
+    return _desktop_src(tool)
+
+
+def _refresh_desktop_db():
+    """Aktualisiert die KDE/XDG-Anwendungsdatenbank, falls das Tool vorhanden ist."""
+    if shutil.which("update-desktop-database"):
+        try:
+            subprocess.run(["update-desktop-database", APPLICATIONS_DIR],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=proc.DEFAULT_TIMEOUT)
+        except Exception as exc:
+            log.debug("_refresh_desktop_db: ignoriert — %s", exc)
+
+
+# --------------------------------------------------------------------------- #
+#  Worker
+# --------------------------------------------------------------------------- #
+class AppImageInstallWorker(QThread):
+    """Lädt ein AppImage herunter und richtet Terminal-Befehl + Desktop-Eintrag ein."""
+    status_signal   = Signal(str)
+    finished_signal = Signal(bool)
+
+    def __init__(self, tool):
+        super().__init__()
+        self.tool = tool
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def _download(self, url, dest, progress=None):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        req = urllib.request.Request(url, headers={"User-Agent": "openxr-vr-control"})
+        with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+            total = int(r.headers.get("Content-Length", 0))
+            done = 0
+            while True:
+                if self._cancel:
+                    raise RuntimeError("Abgebrochen")
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+                done += len(chunk)
+                if progress and total:
+                    progress(done, total)
+
+    def run(self):
+        tool = self.tool
+        try:
+            # 0. Download-URL + Version bestimmen (GitHub-neueste oder feste URL)
+            self.status_signal.emit("🔎 Suche Download ...")
+            try:
+                url, version = resolve_release(tool)
+            except RateLimited as e:
+                self.status_signal.emit(f"Fehler: {e}")
+                self.finished_signal.emit(False)
+                return
+            except Exception as e:
+                self.status_signal.emit(f"Fehler beim Abruf der Release: {e}")
+                self.finished_signal.emit(False)
+                return
+
+            if not url:
+                if tool.get("github_repo"):
+                    self.status_signal.emit(
+                        "Fehler: Kein passendes AppImage für deine Architektur "
+                        f"({platform.machine()}) in den Releases gefunden.")
+                else:
+                    self.status_signal.emit("Fehler: Keine AppImage-URL hinterlegt.")
+                self.finished_signal.emit(False)
+                return
+
+            # 1. Ordnerstruktur anlegen (tools/, tools/<key>/, tools/desktop/)
+            self.status_signal.emit("📁 Erstelle Ordnerstruktur ...")
+            os.makedirs(_tool_dir(tool), exist_ok=True)
+            os.makedirs(DESKTOP_SRC_DIR, exist_ok=True)
+            os.makedirs(LOCAL_BIN, exist_ok=True)
+            os.makedirs(APPLICATIONS_DIR, exist_ok=True)
+
+            # 2. AppImage herunterladen (stabiler lokaler Dateiname)
+            app = _appimage_path(tool)
+
+            def prog(done, total):
+                self.status_signal.emit(
+                    f"⬇ Lade AppImage ... {done/1_000_000:.1f} / {total/1_000_000:.1f} MB")
+
+            self.status_signal.emit("⬇ Lade AppImage ...")
+            self._download(url, app, prog)
+
+            # 3. ausführbar machen
+            self.status_signal.emit("🔧 Mache AppImage ausführbar ...")
+            st = os.stat(app)
+            os.chmod(app, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+            # 4. Terminal-Befehl als Starter-Skript (~/.local/bin/<start_cmd>)
+            #    -> mit FUSE-Fallback (--appimage-extract-and-run), falls libfuse2 fehlt
+            self.status_signal.emit("🔗 Richte Terminal-Befehl ein ...")
+            _write_launcher(tool)
+            _ensure_local_bin_on_path()
+
+            # 5. Icon laden (blob-URL wird automatisch zu raw umgewandelt)
+            icon_url = tool.get("icon_url")
+            if icon_url:
+                self.status_signal.emit("🖼 Lade Icon ...")
+                try:
+                    self._download(_raw_github(icon_url), _icon_path(tool))
+                except Exception as e:
+                    log.warning(f"[AppImage] Icon konnte nicht geladen werden: {e}")
+
+            # 6. .desktop schreiben + für KDE verlinken
+            self.status_signal.emit("🖥 Erstelle Desktop-Eintrag ...")
+            _write_desktop_file(tool)
+            _force_symlink(_desktop_src(tool), _desktop_link(tool))
+
+            # 6b. Vom Programm selbst angelegte Einträge entfernen (z. B. VRCX),
+            #     damit nur unser Eintrag übrig bleibt
+            _remove_foreign_entries(tool)
+            _refresh_desktop_db()
+
+            # 7. Versions-Marker schreiben (echte heruntergeladene Version)
+            try:
+                with open(_marker(tool), "w") as f:
+                    json.dump({"version": version or tool.get("version", "")}, f)
+            except Exception as exc:
+                log.debug("prog: ignoriert — %s", exc)
+
+            self.status_signal.emit("✔ Fertig installiert.")
+            self.finished_signal.emit(True)
+
+        except Exception as e:
+            self.status_signal.emit(f"Fehler: {e}")
+            self.finished_signal.emit(False)

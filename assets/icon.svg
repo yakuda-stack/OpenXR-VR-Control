@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2e3440"/>
+      <stop offset="1" stop-color="#1c1f26"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#88c0d0"/>
+      <stop offset="1" stop-color="#5e81ac"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="none" stroke="#3b4252" stroke-width="4"/>
+  <!-- Tracking-Ring -->
+  <ellipse cx="128" cy="92" rx="68" ry="52" fill="none" stroke="url(#body)" stroke-width="16"/>
+  <!-- Griff -->
+  <path d="M104 118 C 100 150, 98 178, 104 206 Q 108 222, 128 222 Q 148 222, 152 206 C 158 178, 156 150, 152 118 Z"
+        fill="url(#body)"/>
+  <!-- Kopf mit Stick und Tasten -->
+  <circle cx="128" cy="106" r="34" fill="#81a1c1"/>
+  <circle cx="128" cy="106" r="34" fill="none" stroke="#eceff4" stroke-opacity="0.25" stroke-width="3"/>
+  <circle cx="120" cy="100" r="13" fill="#2e3440"/>
+  <circle cx="120" cy="100" r="7" fill="#d8dee9"/>
+  <circle cx="143" cy="97" r="5.5" fill="#a3be8c"/>
+  <circle cx="139" cy="116" r="5.5" fill="#ebcb8b"/>
+</svg>

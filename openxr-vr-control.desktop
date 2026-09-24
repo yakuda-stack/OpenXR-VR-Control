@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=OpenXR/VR-Controls
+Comment=Controller-Belegung für OpenVR- und OpenXR-Spiele (obah + xrBinder)
+Comment[en]=Controller bindings for OpenVR and OpenXR games (obah + xrBinder)
+Exec=python3 /opt/openxr-vr-control/starter.py
+Icon=/opt/openxr-vr-control/assets/icon.png
+Terminal=false
+Type=Application
+Categories=Utility;Game;
+StartupWMClass=openxr-vr-control

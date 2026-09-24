@@ -1,0 +1,30 @@
+[project]
+name = "openxr-vr-control"
+description = "Controller bindings for OpenVR and OpenXR games on Linux (obah + xrBinder) — standalone Controls from Yakuda Connect"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = ["PySide6>=6.5"]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+proctitle = ["setproctitle"]
+dev = ["ruff>=0.5", "pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/yakuda-stack/OpenXR-VR-Control"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "PLE"]
+ignore = ["E501", "E402", "B008", "E701", "UP022", "UP031", "B007", "E741", "B904", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "core", "ui"]
