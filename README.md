@@ -209,3 +209,4 @@ Was sich geändert hat: [CHANGELOG.md](CHANGELOG.md)
 
 <p align="center"><sub>🤖 <b>Transparency note:</b> This project and its documentation are developed with the support of AI coding assistants (<b>Claude by Anthropic</b>). <b>Idea, architecture &amp; UX/UI design:</b> by me. The controls code comes from Yakuda Connect.</sub></p>
 <p align="center"><sub>Licensed under GPL-3.0</sub></p>
+cute
