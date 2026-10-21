@@ -2,6 +2,16 @@
 
 Ausführliche Änderungen je Version (DE + EN). Kurzfassung für Nutzer: [HIGHLIGHTS.md](HIGHLIGHTS.md).
 
+### 🚀 v1.0.1 — 2026-10-21
+
+**🇩🇪 Kleines Update**
+- Info-Fenster: kleiner Dankestext „Danke für deine Unterstützung!“.
+- AUR: Prüfsummen-Fehler beim Installieren behoben (neuer Release-Tag).
+
+**🇬🇧 Small update**
+- Info window: small "Thanks for your support!" note.
+- AUR: fixed checksum error on install (new release tag).
+
 ### 🚀 v1.0.0 — 2026-09-24
 
 **🇩🇪 Erste Version**

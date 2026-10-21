@@ -112,6 +112,11 @@ class AboutDialog(QDialog):
             ("xrBinder", "mittorn — OpenXR API layer", links.XRBINDER),
         ]))
 
+        thanks = QLabel(tr("about_thanks"))
+        thanks.setAlignment(Qt.AlignCenter)
+        thanks.setStyleSheet("color:#7b88a1; font-size:11px; font-style:italic;")
+        root.addWidget(thanks)
+
         note = QLabel(tr("about_ai_note"))
         note.setWordWrap(True)
         note.setAlignment(Qt.AlignCenter)

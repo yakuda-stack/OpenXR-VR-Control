@@ -1,5 +1,12 @@
 # Highlights — OpenXR/VR-Controls
 
+### 🚀 v1.0.1 — 2026-10-21
+
+- 💜 Dankestext im Info-Fenster · Thank-you note in the Info window
+- 🛠️ AUR-Installation repariert · Fixed AUR install
+
+---
+
 ### 🚀 v1.0.0 — 2026-09-24
 
 ---

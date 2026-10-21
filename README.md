@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://discord.gg/ShNKvvZu74"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
   <a href="https://ko-fi.com/yakuda_"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/></a>
-  <a href="https://github.com/yakuda-stack/OpenXR-VR-Control/releases"><img src="https://img.shields.io/badge/Version-v1.0.0-81a1c1?style=for-the-badge" alt="Version"/></a>
+  <a href="https://github.com/yakuda-stack/OpenXR-VR-Control/releases"><img src="https://img.shields.io/badge/Version-v1.0.1-81a1c1?style=for-the-badge" alt="Version"/></a>
   <a href="https://aur.archlinux.org/packages/openxr-vr-control"><img src="https://img.shields.io/badge/AUR-openxr--vr--control-1793D1?style=for-the-badge&logo=archlinux&logoColor=white" alt="AUR"/></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-read-a3be8c?style=for-the-badge" alt="Changelog"/></a>
   <img src="https://img.shields.io/badge/License-GPL--3.0-4c566a?style=for-the-badge" alt="License"/>
@@ -209,4 +209,3 @@ Was sich geändert hat: [CHANGELOG.md](CHANGELOG.md)
 
 <p align="center"><sub>🤖 <b>Transparency note:</b> This project and its documentation are developed with the support of AI coding assistants (<b>Claude by Anthropic</b>). <b>Idea, architecture &amp; UX/UI design:</b> by me. The controls code comes from Yakuda Connect.</sub></p>
 <p align="center"><sub>Licensed under GPL-3.0</sub></p>
-cute

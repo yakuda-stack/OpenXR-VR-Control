@@ -11,7 +11,7 @@
 # Von dort wird gepusht — nicht von hier.
 
 pkgname=openxr-vr-control
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Controller bindings for OpenVR and OpenXR games on Linux (obah + xrBinder) with a GUI"
 arch=('any')
