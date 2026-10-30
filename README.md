@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://discord.gg/ShNKvvZu74"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/></a>
   <a href="https://ko-fi.com/yakuda_"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/></a>
-  <a href="https://github.com/yakuda-stack/OpenXR-VR-Control/releases"><img src="https://img.shields.io/badge/Version-v1.0.1-81a1c1?style=for-the-badge" alt="Version"/></a>
+  <a href="https://github.com/yakuda-stack/OpenXR-VR-Control/releases"><img src="https://img.shields.io/badge/Version-v1.0.2-81a1c1?style=for-the-badge" alt="Version"/></a>
   <a href="https://aur.archlinux.org/packages/openxr-vr-control"><img src="https://img.shields.io/badge/AUR-openxr--vr--control-1793D1?style=for-the-badge&logo=archlinux&logoColor=white" alt="AUR"/></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-read-a3be8c?style=for-the-badge" alt="Changelog"/></a>
   <img src="https://img.shields.io/badge/License-GPL--3.0-4c566a?style=for-the-badge" alt="License"/>
@@ -131,7 +131,7 @@ For everyone playing VR on Linux **without** a Pico or Quest — Valve Index, HT
   <img src="assets/screenshot_deadzone.png" alt="Deadzone" width="560"/>
 </p>
 
-> **Deadzone in OpenVR games:** saved as `deadzone_pct` in the binding file. xrizer doesn't evaluate that value yet — for xrizer games switch on xrBinder and use the deadzone of the game's `· OpenXR` entry instead.
+> **Deadzone in OpenVR games:** button **◎ Deadzone** next to the action set tabs (or click a stick → tab **◎ Deadzone**). Checkbox **"I don't use xrizer (e.g. SteamVR) – use deadzone_pct"** (default on): a 0–100 % slider writes `deadzone_pct` into the stick's "Joystick" bindings, saved with **Apply** + **Save**. Checkbox off: the deadzone goes through xrBinder (start the game once), so it also works with xrizer. Game reports no buttons (e.g. VRChat)? **🧩 Use OpenXR template** unlocks the sliders.
 
 ### 📁 Where things are stored
 
@@ -186,7 +186,7 @@ Für alle, die unter Linux VR spielen, aber **keine** Pico oder Quest haben: Val
 3. Unter **② Controller** den Controller wählen, unter **③ Bindings laden** den Ausgangspunkt.
 4. Tasten anklicken, belegen und **Speichern**.
 
-> Die Deadzone bei OpenVR-Spielen wird als `deadzone_pct` gespeichert. xrizer wertet diesen Wert noch nicht aus. Bei xrizer-Spielen deshalb xrBinder einschalten und die Deadzone im `· OpenXR`-Eintrag einstellen.
+> **Deadzone bei OpenVR-Spielen:** Knopf **◎ Deadzone** neben den Action-Set-Tabs (oder Stick anklicken → Tab **◎ Deadzone**). Haken **„Ich nutze nicht xrizer (z. B. SteamVR) – deadzone_pct verwenden“** (Standard an): Regler 0–100 % schreibt `deadzone_pct` in die Joystick-Belegungen des Sticks, gespeichert mit **Übernehmen** + **Speichern**. Haken aus: Deadzone über xrBinder (Spiel einmal starten), wirkt so auch bei xrizer. Meldet das Spiel keine Tasten (z. B. VRChat), schaltet **🧩 OpenXR-Vorlage verwenden** die Regler frei.
 
 Was sich geändert hat: [CHANGELOG.md](CHANGELOG.md)
 

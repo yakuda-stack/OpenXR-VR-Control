@@ -192,6 +192,7 @@ class ControlsTabMixin:
             view.layout_changed.connect(lambda state, v=view: self._save_obah_layout(v, state))
             view.tidy_changed.connect(lambda _t: self._sync_obah_tidy_button())
         ui.btn_obah_tidy.toggled.connect(self.on_obah_tidy_toggled)
+        ui.btn_obah_deadzone.clicked.connect(self.open_obah_deadzone_dialog)
         ui.btn_obah_save.clicked.connect(lambda: self.save_obah_binding(None))
         for kind, key in (("xrizer", "obah_save_xrizer"), ("vapor", "obah_save_vapor"),
                           ("opencomposite", "obah_save_opencomposite")):
@@ -912,17 +913,81 @@ class ControlsTabMixin:
         set_name = ui.obah_set_tabs.tabData(ui.obah_set_tabs.currentIndex())
         set_label = ui.obah_set_tabs.tabText(ui.obah_set_tabs.currentIndex())
         before = oe.source_drafts(edit["binding"], set_name, d, side)
+        dz_app, dz = (self.xr_openvr_deadzone(self._current_obah_game())
+                      if d.type == "joystick" else (None, None))
         dlg = BindingDialog(self, manifest=edit["manifest"], binding=edit["binding"],
                             controller_type=ct, set_name=set_name, set_label=set_label,
-                            input_def=d, side=side, drafts=before)
+                            input_def=d, side=side, drafts=before, deadzone=dz)
         self._obah_open_dialog = dlg            # fuer Tests erreichbar
         accepted = dlg.exec() == BindingDialog.Accepted
         self._obah_open_dialog = None
+        if accepted and dz_app and dlg.dz_mappings is not None and not dlg.dz_use_pct:
+            self.xr_openvr_save_deadzone(dz_app, dz["mappings"], dlg.dz_mappings)
         if not accepted or dlg.drafts == before:
             return
         oe.apply_drafts(edit["binding"], set_name, d, side, dlg.drafts)
         self._set_obah_dirty(True)
         self._render_obah_views()
+
+    def open_obah_deadzone_dialog(self):
+        """Knopf „◎ Deadzone“ neben den Action-Set-Tabs: beide Sticks auf einmal."""
+        from ui.deadzone_dialog import DeadzoneDialog
+
+        ui = self.ui
+        edit = getattr(self, "_obah_edit", None) or {}
+        ct = edit.get("controller")
+        set_label = ui.obah_set_tabs.tabText(ui.obah_set_tabs.currentIndex())
+        if getattr(self, "_xr_mode", False):
+            import xr_bindings as xr
+            dlg = DeadzoneDialog(self, title=set_label or tr("xrd_deadzone"),
+                                 controller_type=ct or xr.DEFAULT_CT,
+                                 xr_state=self._xr_state, xr_mappings=self._xr_mappings)
+            self._obah_open_dialog = dlg        # fuer Tests erreichbar
+            accepted = dlg.exec() == DeadzoneDialog.Accepted
+            self._obah_open_dialog = None
+            if not accepted or dlg.xr_mappings == self._xr_mappings:
+                return
+            self._xr_mappings = dlg.xr_mappings
+            self._set_obah_dirty(True)
+            self.xr_render_views()
+            return
+        if not edit:
+            return
+        set_name = ui.obah_set_tabs.tabData(ui.obah_set_tabs.currentIndex())
+        inputs, sides = {}, []
+        for side, label in (("left", tr("obah_left")), ("right", tr("obah_right"))):
+            d = oe.deadzone_input_for_side(ct, side)
+            if d is None:
+                continue
+            inputs[side] = d
+            sides.append((side, label, oe.source_drafts(edit["binding"], set_name, d, side),
+                          oe.deadzone_modes(d)))
+        if not sides:
+            ui.lbl_obah_editor_status.setText(tr("dz_no_stick"))
+            return
+        sticks = any(d.type == "joystick" for d in inputs.values())
+        dz_app, dz = (self.xr_openvr_deadzone(self._current_obah_game())
+                      if sticks else (None, None))
+        dlg = DeadzoneDialog(self, title=set_label, manifest=edit["manifest"], sides=sides,
+                             xr=dz, controller_type=ct, show_choice=sticks)
+        self._obah_open_dialog = dlg            # fuer Tests erreichbar
+        accepted = dlg.exec() == DeadzoneDialog.Accepted
+        self._obah_open_dialog = None
+        if not accepted:
+            return
+        if not dlg.use_pct:
+            if dz_app and dlg.dz_mappings is not None:
+                self.xr_openvr_save_deadzone(dz_app, dz["mappings"], dlg.dz_mappings)
+            return
+        changed = False
+        for side, _label, before, _modes in sides:
+            after = dlg.drafts_of(side)
+            if after != before:
+                oe.apply_drafts(edit["binding"], set_name, inputs[side], side, after)
+                changed = True
+        if changed:
+            self._set_obah_dirty(True)
+            self._render_obah_views()
 
     def _set_obah_dirty(self, dirty):
         self._obah_dirty = bool(dirty)

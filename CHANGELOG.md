@@ -2,6 +2,22 @@
 
 Ausführliche Änderungen je Version (DE + EN). Kurzfassung für Nutzer: [HIGHLIGHTS.md](HIGHLIGHTS.md).
 
+### 🚀 v1.0.2 — 2026-10-30
+
+**🇩🇪 Deadzone-Update**
+- Neu: Knopf „◎ Deadzone“ neben den Action-Set-Tabs – Deadzone beider Sticks auf einen Blick (OpenVR und OpenXR).
+- Neu: Haken „Ich nutze nicht xrizer (z. B. SteamVR) – deadzone_pct verwenden“ (Standard: an). An: Regler 0–100 % schreibt `deadzone_pct` in alle Belegungen des Sticks im Modus „Joystick“, gespeichert mit „Übernehmen“ + „Speichern“. Ohne passende Belegung ist der Regler gesperrt.
+- Neu: Haken aus → Deadzone für OpenVR-Spiele über xrBinder, wirkt so auch bei xrizer. Das passende xrBinder-Spiel wird automatisch gefunden.
+- Neu: Knopf „🧩 OpenXR-Vorlage verwenden“ im Deadzone-Tab für Spiele ohne gemeldete Tasten (z. B. VRChat über xrizer).
+- Fix: Die Action-Set-Tabs (Global, Menu, Action Menu …) wechseln nicht mehr versehentlich beim Scrollen mit dem Mausrad.
+
+**🇬🇧 Deadzone update**
+- New: "◎ Deadzone" button next to the action set tabs – deadzone of both sticks at a glance (OpenVR and OpenXR).
+- New: checkbox "I don't use xrizer (e.g. SteamVR) – use deadzone_pct" (default: on). On: a 0–100 % slider writes `deadzone_pct` into every binding of the stick in "Joystick" mode, saved with "Apply" + "Save". Without such a binding the slider is locked.
+- New: checkbox off → deadzone for OpenVR games via xrBinder, so it also works with xrizer. The matching xrBinder game is found automatically.
+- New: "🧩 Use OpenXR template" button in the deadzone tab for games that report no buttons (e.g. VRChat via xrizer).
+- Fix: The action set tabs (Global, Menu, Action Menu …) no longer switch by accident when scrolling with the mouse wheel.
+
 ### 🚀 v1.0.1 — 2026-10-21
 
 **🇩🇪 Kleines Update**

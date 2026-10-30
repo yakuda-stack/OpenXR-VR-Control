@@ -1,6 +1,6 @@
 # Architektur – OpenXR/VR-Controls
 
-Stand: v1.0.1. Der Controls-Code ist aus **Yakuda Connect v1.3.7** kopiert.
+Stand: v1.0.2. Der Controls-Code ist aus **Yakuda Connect v1.3.7** kopiert.
 Regel: Änderungen zuerst in Yakuda Connect, dann hierher nachziehen.
 
 ```

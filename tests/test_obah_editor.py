@@ -213,7 +213,7 @@ def test_deadzone_helpers_only_touch_stick_modes():
     assert drafts[0]["parameters"] == {"deadzone_pct": "15"}
     assert drafts[1]["parameters"] == {"deadzone_pct": "25"}      # dpad bleibt
     assert drafts[2]["parameters"]["deadzone_pct"] == "15"
-    oe.set_drafts_deadzone(drafts, 99)                               # auf Maximum begrenzt
+    oe.set_drafts_deadzone(drafts, 150)                              # auf Maximum begrenzt
     assert oe.draft_deadzone(drafts[0]) == oe.DEADZONE_MAX_PCT
     oe.set_drafts_deadzone(drafts, 0)                                # aus -> Parameter weg
     assert "parameters" not in drafts[0]

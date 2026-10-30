@@ -541,9 +541,11 @@ def known_parameter_specs(d, mode):
 # Wie der Deadzone-Tab bei OpenXR-Spielen, aber ueber den OpenVR-Parameter
 # 'deadzone_pct' der Bindings im Modus joystick/trackpad (SteamVR-Format,
 # Wert als Text "0".."100"). 0 = aus -> Parameter wird entfernt.
+# Beim Stick zaehlt nur der Modus joystick, beim Trackpad beide.
 DEADZONE_MODES = ("joystick", "trackpad")
+STICK_DEADZONE_MODES = ("joystick",)
 DEADZONE_PARAM = "deadzone_pct"
-DEADZONE_MAX_PCT = 50
+DEADZONE_MAX_PCT = 100
 
 
 def deadzone_input(d):
@@ -551,9 +553,14 @@ def deadzone_input(d):
     return any(m in DEADZONE_MODES for m in supported_modes(d))
 
 
-def deadzone_drafts(drafts):
-    """Die Bindings, fuer die eine Deadzone gilt (Modus joystick/trackpad)."""
-    return [x for x in drafts if x.get("mode") in DEADZONE_MODES]
+def deadzone_modes(d):
+    """Modi, in denen 'deadzone_pct' bei dieser Eingabe gesetzt wird."""
+    return STICK_DEADZONE_MODES if d.type == "joystick" else DEADZONE_MODES
+
+
+def deadzone_drafts(drafts, modes=DEADZONE_MODES):
+    """Die Bindings, fuer die eine Deadzone gilt."""
+    return [x for x in drafts if x.get("mode") in modes]
 
 
 def draft_deadzone(draft):
@@ -566,14 +573,20 @@ def draft_deadzone(draft):
     return max(0, min(100, v))
 
 
-def set_drafts_deadzone(drafts, pct):
-    """Deadzone fuer ALLE Stick-/Trackpad-Bindings dieser Eingabe setzen."""
+def set_drafts_deadzone(drafts, pct, modes=DEADZONE_MODES):
+    """Deadzone fuer alle passenden Bindings dieser Eingabe setzen."""
     pct = max(0, min(DEADZONE_MAX_PCT, int(pct)))
-    for draft in deadzone_drafts(drafts):
+    for draft in deadzone_drafts(drafts, modes):
         if pct:
             draft.setdefault("parameters", {})[DEADZONE_PARAM] = str(pct)
         else:
             remove_draft_parameter(draft, DEADZONE_PARAM)
+
+
+def deadzone_input_for_side(controller_type, side):
+    """Stick der Seite (sonst Trackpad) fuer den Deadzone-Knopf, oder None."""
+    found = [d for d in inputs_for_side(controller_type, side) if deadzone_input(d)]
+    return next((d for d in found if d.type == "joystick"), found[0] if found else None)
 
 
 def parse_parameter_value(text):

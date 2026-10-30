@@ -282,6 +282,8 @@ class Ui_MainWindow:
             self.btn_obah_clear_manifest.setToolTip(tr("obah_clear_manifest_tip"))
             self.btn_obah_layout_reset.setText(tr("obah_layout_reset"))
             self.btn_obah_tidy.setText(tr("obah_tidy"))
+            self.btn_obah_deadzone.setText("◎  " + tr("dz_button"))
+            self.btn_obah_deadzone.setToolTip(tr("dz_button_tip"))
             self.btn_obah_tidy.setToolTip(tr("obah_tidy_tip"))
             self.btn_obah_discard.setText(tr("obah_discard"))
             for lbl, key in self.obah_step_labels:
@@ -619,7 +621,6 @@ class Ui_MainWindow:
         v.addWidget(self.obah_body)
 
         # ---- Bindings-Ansicht: Action Sets als Tabs, darunter beide Hände
-        from PySide6.QtWidgets import QTabBar
         from ui.controller_view import ControllerBindingView
 
         self.obah_editor = QWidget()
@@ -633,7 +634,8 @@ class Ui_MainWindow:
         sep.setStyleSheet("color:#2e3440; background:#2e3440; max-height:1px;")
         ev.addWidget(sep)
 
-        self.obah_set_tabs = QTabBar()
+        from ui.no_wheel import NoWheelTabBar
+        self.obah_set_tabs = NoWheelTabBar()
         self.obah_set_tabs.setExpanding(False)
         self.obah_set_tabs.setDrawBase(False)
         self.obah_set_tabs.setUsesScrollButtons(True)
@@ -644,7 +646,22 @@ class Ui_MainWindow:
             QTabBar::tab:hover:!selected { background:#3b4252; color:#d8dee9; }
             QTabBar::tab:selected { background:#5e81ac; color:white; font-weight:bold; }
         """)
-        ev.addWidget(self.obah_set_tabs)
+        # Rechts neben den Tabs: schneller Weg zur Deadzone beider Sticks
+        set_row = QHBoxLayout()
+        set_row.setSpacing(10)
+        set_row.addWidget(self.obah_set_tabs)
+        self.btn_obah_deadzone = QPushButton("◎  " + tr("dz_button"))
+        self.btn_obah_deadzone.setToolTip(tr("dz_button_tip"))
+        self.btn_obah_deadzone.setCursor(Qt.PointingHandCursor)
+        self.btn_obah_deadzone.setStyleSheet("""
+            QPushButton { background:#3b4f63; color:#eceff4; padding:6px 14px;
+                          border:1px solid #5e81ac; border-radius:5px; font-size:12px;
+                          font-weight:bold; }
+            QPushButton:hover { background:#4c6a85; }
+        """)
+        set_row.addWidget(self.btn_obah_deadzone)
+        set_row.addStretch()
+        ev.addLayout(set_row)
 
         status_row = QHBoxLayout()
         status_row.setSpacing(8)

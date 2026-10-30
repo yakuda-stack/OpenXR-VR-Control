@@ -358,6 +358,42 @@ class XrControlsMixin:
         self.ui.lbl_obah_editor_status.setStyleSheet(
             f"color:{'#a3be8c' if ok else '#ebcb8b'}; font-size:11px;")
 
+    # ------------------------------------------------------------------ #
+    #  Deadzone aus der OpenVR-Ansicht (obah) — wird in xrBinder geschrieben
+    # ------------------------------------------------------------------ #
+    def xr_openvr_deadzone(self, game):
+        """(xrBinder-Name, Daten fuer den Deadzone-Tab) zum OpenVR-Spiel.
+        Ohne passenden Namen: (None, {"note": ...}) — der Tab erklaert dann,
+        was zu tun ist."""
+        import xr_openvr_link as link
+        if game is None:
+            return None, None
+        session = self.ui.xrbinder_session
+        if not self.ui.xrbinder_card.is_enabled():
+            return None, {"note": tr("bd_deadzone_xr_off")}
+        app = link.find_app(game, session.games(), session.pid_of)
+        if not app:
+            return None, {"note": tr("bd_deadzone_xr_unknown").format(game=game.name)}
+        state = self._xr_read_state(app)
+        mappings = xr.mappings_from_list(state.get("mappings"))
+        return app, {"state": state, "mappings": mappings,
+                     "game": xb.display_app_name(app)}
+
+    def xr_openvr_save_deadzone(self, app, before, after):
+        """Nur speichern, wenn sich etwas geaendert hat — sofort, ohne obah-Speichern."""
+        if after == before:
+            return
+        try:
+            self.ui.xrbinder_session.save(app, xr.mappings_to_list(after))
+        except (OSError, ValueError) as exc:
+            log.warning("Deadzone (xrBinder) nicht gespeichert: %s", exc)
+            QMessageBox.warning(self, tr("obah_save_failed_title"),
+                                tr("obah_save_failed_text").format(error=exc))
+            return
+        self.ui.lbl_obah_editor_status.setText(
+            "✔ " + tr("bd_deadzone_xr_saved").format(game=xb.display_app_name(app)))
+        self.ui.lbl_obah_editor_status.setStyleSheet("color:#a3be8c; font-size:11px;")
+
     def _xr_state_updated(self, name):
         """Frische Aktionen vom laufenden Spiel."""
         if not self._xr_mode or name != self._xr_game:

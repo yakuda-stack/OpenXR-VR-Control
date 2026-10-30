@@ -13,8 +13,9 @@ rechts den gewaehlten Eintrag (Mode, je Feld eine Aktion, Parameter,
   * Parameter hinzufuegen (bekannte mit Beschreibung, oder eigene),
     aendern, entfernen
   * Uebernehmen / Abbrechen
-  * Tab „Deadzone“ (nur Stick/Trackpad): Regler 0–50 % fuer 'deadzone_pct'
-    aller Bindings im Modus joystick/trackpad — wie bei OpenXR-Spielen
+  * Tab „Deadzone“ (nur Stick/Trackpad), siehe ui/deadzone_chooser.py:
+    Haken „deadzone_pct verwenden“ (Standard AN) -> Regler 0–100 % fuer
+    'deadzone_pct'; Haken aus -> xrBinder-Regler (wirkt auch ueber xrizer).
 
 Gearbeitet wird auf Kopien (drafts). Erst "Uebernehmen" gibt sie zurueck;
 geschrieben wird die Datei spaeter mit "Speichern" im Controls-Tab.
@@ -25,7 +26,7 @@ import copy
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
                                QInputDialog, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QMenu, QPushButton, QScrollArea, QSlider,
+                               QListWidgetItem, QMenu, QPushButton, QScrollArea,
                                QTabBar, QToolButton, QVBoxLayout, QWidget)
 
 import obah_editor as oe
@@ -125,7 +126,7 @@ class BindingDialog(QDialog):
     """Bindings EINER Eingabe (eine Seite, ein Action Set) bearbeiten."""
 
     def __init__(self, parent, *, manifest, binding, controller_type, set_name,
-                 set_label, input_def, side, drafts):
+                 set_label, input_def, side, drafts, deadzone=None):
         super().__init__(parent)
         self.setObjectName("bindingDialog")
         self.setStyleSheet(DIALOG_CSS)
@@ -140,6 +141,8 @@ class BindingDialog(QDialog):
         self.side = side
         self.drafts = [copy.deepcopy(x) for x in drafts]
         self._current = 0 if self.drafts else -1
+        self.dz = deadzone if input_def.type == "joystick" else None
+        self.dz_mappings = None
 
         name = input_def.name[:1].upper() + input_def.name[1:]
         side_txt = {"left": tr("obah_left"), "right": tr("obah_right")}.get(side, "")
@@ -263,88 +266,32 @@ class BindingDialog(QDialog):
         self.body_host.setVisible(not dz)
         self.dz_panel.setVisible(dz)
         if dz:
-            self._sync_deadzone()
+            self.dz_panel.sync()
         else:
             self._fill_list()          # Parameterliste zeigt den neuen Wert
 
     def _build_deadzone_panel(self):
-        panel = QFrame()
-        panel.setObjectName("bdpanel")
-        lay = QVBoxLayout(panel)
-        lay.setContentsMargins(14, 12, 14, 12)
-        lay.setSpacing(12)
-        intro = QLabel(tr("xrd_deadzone_tip"))
-        intro.setWordWrap(True)
-        intro.setStyleSheet("color:#a6b2c0; font-size:11px;")
-        lay.addWidget(intro)
-        row = QHBoxLayout()
-        row.setSpacing(10)
+        """Stick: Haken „deadzone_pct verwenden“ (Standard AN), sonst xrBinder.
+        Trackpad: nur deadzone_pct."""
+        from ui.deadzone_chooser import DeadzoneChooser
         side = {"left": tr("obah_left"), "right": tr("obah_right")}.get(self.side,
                                                                          tr("obah_single"))
-        name = QLabel(side.upper())
-        name.setObjectName("bdsection")
-        name.setMinimumWidth(80)
-        row.addWidget(name)
-        self.dz_slider = QSlider(Qt.Horizontal)
-        self.dz_slider.setRange(0, oe.DEADZONE_MAX_PCT)
-        self.dz_slider.setPageStep(5)
-        self.dz_slider.setToolTip(tr("xrd_deadzone_value_tip"))
-        self.dz_slider.valueChanged.connect(self._dz_changed)
-        row.addWidget(self.dz_slider, 1)
-        self.dz_value = QLabel()
-        self.dz_value.setMinimumWidth(44)
-        self.dz_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        row.addWidget(self.dz_value)
-        self.dz_reset = QToolButton()
-        self.dz_reset.setObjectName("bdx")
-        self.dz_reset.setText("↺")
-        self.dz_reset.setToolTip(tr("xrd_deadzone_reset_tip"))
-        self.dz_reset.setCursor(Qt.PointingHandCursor)
-        self.dz_reset.clicked.connect(lambda: self._dz_changed(0))
-        row.addWidget(self.dz_reset)
-        lay.addLayout(row)
-        self.dz_info = QLabel()
-        self.dz_info.setWordWrap(True)
-        self.dz_info.setStyleSheet("color:#4c566a; font-size:11px; margin-left:90px;")
-        lay.addWidget(self.dz_info)
-        note = QLabel(tr("bd_deadzone_runtime_note"))
-        note.setWordWrap(True)
-        note.setStyleSheet("color:#ebcb8b; font-size:11px;")
-        lay.addWidget(note)
-        lay.addStretch()
-        return panel
+        chooser = DeadzoneChooser(
+            self.manifest, [(self.side or "single", side, self.drafts,
+                             oe.deadzone_modes(self.d))],
+            xr=self.dz, controller_type=self.controller,
+            show_choice=self.d.type == "joystick")
+        self.dz_mappings = chooser.dz_mappings
+        self.dz_rows = chooser.xr_rows
+        row = chooser.pct_panel.rows[self.side or "single"]
+        self.dz_slider = row["slider"]
+        self.dz_reset = row["reset"]
+        self.dz_check = chooser.check
+        return chooser
 
-    def _dz_changed(self, value):
-        if getattr(self, "_dz_syncing", False):
-            return
-        oe.set_drafts_deadzone(self.drafts, value)
-        self._sync_deadzone()
-
-    def _sync_deadzone(self):
-        self._dz_syncing = True
-        try:
-            targets = oe.deadzone_drafts(self.drafts)
-            vals = [oe.draft_deadzone(x) for x in targets]
-            same = len(set(vals)) <= 1
-            v = vals[0] if vals and same else 0
-            self.dz_slider.setEnabled(bool(targets))
-            self.dz_slider.setValue(min(v, oe.DEADZONE_MAX_PCT))
-            if not vals:
-                txt = "—"
-            elif not same:
-                txt = "≠"
-            else:
-                txt = f"{v} %" if v else tr("xrd_deadzone_off")
-            self.dz_value.setText(txt)
-            self.dz_reset.setEnabled(any(vals))
-            if targets:
-                names = ", ".join(filter(None, (oe.draft_summary(self.manifest, x, get_language())
-                                                for x in targets))) or tr("bd_no_actions")
-                self.dz_info.setText(tr("xrd_deadzone_affects").format(actions=names))
-            else:
-                self.dz_info.setText(tr("bd_deadzone_none"))
-        finally:
-            self._dz_syncing = False
+    @property
+    def dz_use_pct(self):
+        return self.dz_panel is None or self.dz_panel.use_pct
 
     # ------------------------------------------------------------------ #
     #  Liste links

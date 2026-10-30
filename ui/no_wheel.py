@@ -18,13 +18,21 @@ schon vorhandene); Combos in reinen Qt-Dialogen bleiben unberuehrt.
 
 install(app) einmal aufrufen; mehrfacher Aufruf ist harmlos.
 """
-from PySide6.QtWidgets import QComboBox
+from PySide6.QtWidgets import QComboBox, QTabBar
 
 _INSTALLED = False
 
 
 def _wheel_ignored(self, event):
     event.ignore()          # -> Qt gibt das Rad an das Elternfenster weiter
+
+
+class NoWheelTabBar(QTabBar):
+    """Tab-Leiste, die das Mausrad ignoriert (Action Sets: Global, Menu …).
+    Sonst wechselt man beim Scrollen der Seite still den Tab."""
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 
 def install(app=None):
